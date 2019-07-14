@@ -1,4 +1,4 @@
-(ns petterik.tools.reducibles
+(ns petterik.tools.reducible-seq
   (:refer-clojure
     :exclude
     [map filter remove mapcat keep map-indexed]))
