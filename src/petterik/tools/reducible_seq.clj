@@ -1,7 +1,11 @@
 (ns petterik.tools.reducible-seq
+  (:require
+    [petterik.tools.transducing-sequence :as xf-seq])
   (:refer-clojure
     :exclude
     [map filter remove mapcat keep map-indexed keep-indexed partition-all take]))
+
+(def ^:dynamic *warn-on-use-after-reduced* true)
 
 (def to-overwrite
   ["map"
@@ -24,48 +28,61 @@
         " Store the collection in a separate coll before using it twice.")
       {})))
 
+(defn print-reuse-warning [type]
+  (prn (format "WARN: Reducible seq was already reduced. Will create %s again. Please cache collection in a separate collection if you want to iterate over it more than once."
+         type)))
+
 (defprotocol IReducibleSeq
   (seq! [this])
   (reducible! [this]))
 
 (deftype ReducibleSeq [^:unsynchronized-mutable ls
-                       ^:unsynchronized-mutable xf_fn
-                       ^:unsynchronized-mutable xf_args
+                       ^:unsynchronized-mutable xf
                        ^:unsynchronized-mutable coll
                        met]
   IReducibleSeq
   (seq! [this]
     (locking this
       (condp = ls
-        nil nil
-        ::reduced (throw-already-reduced-ex)
-        (let [lv (seq ls)]
-          (when (= ::reduced xf_fn)
-            (prn "WARN: Reducible seq was already reduced. Will create seq again. Please cache collection in a separate collection if you want to iterate over it more than once."))
-          ;; Unset xf and coll for gc.
-          (set! (.xf_fn this) nil)
-          (set! (.xf_args this) nil)
+        nil
+        (let [ls (xf-seq/transducing-sequence xf coll)]
+          (set! (.ls this) ls)
+          (set! (.xf this) nil)
           (set! (.coll this) nil)
-          (set! (.ls this) lv)
-          ;; TODO: chunked seq optimizations...?
-          ;; By just using chunked seq optimizations we should
-          ;; be able to just use that for seq.
-          ;; making the even smaller.
-          ;; This will basically become a wrapper around either
-          ;; using sequence or eduction.
-          ;; Where when using eduction twice will warn.
-          lv))))
+          ls)
+
+        ;; Warn on reduced and re-create the sequence.
+        ::reduced
+        (if *warn-on-use-after-reduced*
+          (do
+            (print-reuse-warning "seq")
+            (set! (.ls this) nil)
+            (seq! this))
+          (throw-already-reduced-ex))
+
+        ;; else, return the created sequence.
+        ls)))
 
   (reducible! [this]
     (locking this
-      (if (some? xf_fn)
-        (let [edu (eduction (apply xf_fn xf_args) coll)]
-          ;; Unset xf and coll to avoid coming to this branch again.
-          (set! (.xf_fn this) ::reduced)
-          (set! (.xf_args this) nil)
-          (set! (.coll this) nil)
+      (cond
+        (seq? ls)
+        ls
+
+        (some? xf)
+        (let [edu (eduction xf coll)]
+          (if (= ::reduced ls)
+            (print-reuse-warning "reducible")
+            (set! (.ls this) ::reduced))
+          ;; When we're just warning about reuse, we need the
+          ;; xf and coll to create the seq.
+          (when (not *warn-on-use-after-reduced*)
+            (set! (.xf this) nil)
+            (set! (.coll this) nil))
           edu)
-        (seq! this))))
+
+        :else
+        (throw-already-reduced-ex))))
 
   java.io.Serializable
   clojure.lang.IObj
@@ -73,7 +90,7 @@
   (withMeta [this m]
     (if (identical? met m)
       this
-      (ReducibleSeq. ls xf_fn xf_args coll m)))
+      (ReducibleSeq. ls xf coll m)))
 
   clojure.lang.Seqable
   (seq [this]
@@ -83,7 +100,29 @@
   (hasheq [this]
     (clojure.lang.Murmur3/hashOrdered (seq! this)))
 
+  java.lang.Object
+  (hashCode [this]
+    (if-some [s (seq this)]
+      (clojure.lang.Util/hash s)
+      1))
+  (equals [this obj]
+    (if-some [s (seq this)]
+      (.equals s obj)
+      (nil? (clojure.lang.RT/seq obj))))
+
   clojure.lang.Sequential
+
+  clojure.lang.IPersistentCollection
+  (count [this]
+    (clojure.lang.RT/length (seq! this)))
+  (cons [this obj]
+    (clojure.lang.RT/cons obj (seq! this)))
+  (empty [this]
+    (clojure.lang.PersistentList/EMPTY))
+  (equiv [this obj]
+    (if-some [s (seq! this)]
+      (.equiv s obj)
+      (nil? (clojure.lang.RT/seq obj))))
 
   clojure.lang.IReduce
   (reduce [this rf]
@@ -94,12 +133,11 @@
     (clojure.core/reduce rf init (reducible! this))))
 
 (defmethod print-method ReducibleSeq [c w]
-  (prn (seq c))
   (print-simple (seq c) w))
 
 (defn reducible-seq
-  ([s coll xf-fn & xf-args]
-   (ReducibleSeq. s xf-fn xf-args coll nil)))
+  ([xf coll]
+   (ReducibleSeq. nil xf coll nil)))
 
 (defmacro defreducible [clj-fn]
   (let [arg1 (gensym)
@@ -109,12 +147,7 @@
     `(defn ~sym
        ([~arg1] (~fq-sym ~arg1))
        ([~arg1 ~arg2]
-        (reducible-seq
-          (~fq-sym ~arg1 ~arg2)
-          ~arg2
-          ~fq-sym
-          ~arg1)))))
-
+        (reducible-seq (~fq-sym ~arg1) ~arg2)))))
 
 (comment
   (do
