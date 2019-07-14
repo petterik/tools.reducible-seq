@@ -1,7 +1,7 @@
 (ns petterik.tools.reducible-seq
   (:refer-clojure
     :exclude
-    [map filter remove mapcat keep map-indexed]))
+    [map filter remove mapcat keep map-indexed keep-indexed partition-all take]))
 
 (def to-overwrite
   ["map"
@@ -9,7 +9,10 @@
    "remove"
    "mapcat"
    "keep"
-   "map-indexed"])
+   "keep-indexed"
+   "map-indexed"
+   "partition-all"
+   "take"])
 
 (comment
   (mapv symbol to-overwrite))
@@ -120,5 +123,7 @@
   (defreducible "remove")
   (defreducible "mapcat")
   (defreducible "keep")
-  (defreducible "map-indexed"))
-
+  (defreducible "keep-indexed")
+  (defreducible "map-indexed")
+  (defreducible "partition-all")
+  (defreducible "take"))
