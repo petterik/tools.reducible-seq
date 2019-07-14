@@ -1,10 +1,54 @@
-# tools.reducibles
+# tools.reducible-seq
 
-A Clojure library designed to ... well, that part is up to you.
+Experimenting with optimizing the sequence functions with a transducer to implement IReduceInit. 
+
+Near 5x performance speed up in a very good case.
+
+There are some downsides though. One being a breaking change, where sequences could be calculated twice if one is not careful. There's a warning when this happens though.
 
 ## Usage
 
-FIXME
+```sh
+clj -Sdeps '{:deps {petterik/tools.reducible-seq {:git/url "https://github.com/petterik/tools.reducible-seq" :sha "5a7496212433cbafc4058a62b79ac35292430264"}}}'
+```
+
+```clj
+(require '[petterik.tools.reducible-seq])
+(in-ns 'petterik.tools.reducible-seq)
+
+;; Using clojure.core's map, mapcat, filter and keep
+(let [map clojure.core/map
+      filter clojure.core/filter
+      mapcat clojure.core/mapcat]
+  (time (->> (range (long 1e6))
+          (map str)
+          (mapcat seq)
+          (map int)
+          (filter even?)
+          (keep #(when (< 2 %) %))
+          (map inc)
+          (map inc)
+          (map inc)
+          (map inc)
+          (map inc)
+          (reduce + 0))))
+;; Elapsed time: 3086.734262 msecs
+
+;; With experiment's implementation of map, mapcat, filter and keep
+(time (->> (range (long 1e6))
+        (map str)
+        (mapcat seq)
+        (map int)
+        (filter even?)
+        (keep #(when (< 2 %) %))
+        (map inc)
+        (map inc)
+        (map inc)
+        (map inc)
+        (map inc)
+        (reduce + 0)))
+;; Elapsed time: 575.475232
+```
 
 ## License
 
