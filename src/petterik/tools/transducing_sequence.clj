@@ -32,11 +32,13 @@
         rrf (preserving-reduced xf)
         buf (TransientBuffer. (java.util.ArrayList.))]
     (letfn [(return-step [s chunk]
+              ;; TODO: As this case was a massive improvement
+              ;;       (2x faster on the dechunked example)
+              ;;       Add additional cases? for 2, 3, 4, ...?
               (case (buffer-size chunk)
                 0 (step s)
                 1 (lazy-seq
-                    (cons
-                      (nth chunk 0)
+                    (cons (nth chunk 0)
                       (step s)))
                 ;; else
                 (lazy-cat

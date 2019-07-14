@@ -17,7 +17,6 @@
 (comment
   (mapv symbol to-overwrite))
 
-
 (defn throw-already-reduced-ex []
   (throw
     (ex-info
@@ -49,6 +48,12 @@
           (set! (.coll this) nil)
           (set! (.ls this) lv)
           ;; TODO: chunked seq optimizations...?
+          ;; By just using chunked seq optimizations we should
+          ;; be able to just use that for seq.
+          ;; making the even smaller.
+          ;; This will basically become a wrapper around either
+          ;; using sequence or eduction.
+          ;; Where when using eduction twice will warn.
           lv))))
 
   (reducible! [this]
