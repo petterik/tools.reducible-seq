@@ -1,22 +1,10 @@
 (ns petterik.tools.reducible-seq
   (:require
-    [petterik.tools.transducing-sequence :as xf-seq])
-  (:refer-clojure
-    :exclude
-    [map filter remove mapcat keep map-indexed keep-indexed partition-all take]))
+    [petterik.tools.transducing-sequence :as xf-seq]))
 
-(def ^:dynamic *warn-on-use-after-reduced* true)
-
-(def to-overwrite
-  ["map"
-   "filter"
-   "remove"
-   "mapcat"
-   "keep"
-   "keep-indexed"
-   "map-indexed"
-   "partition-all"
-   "take"])
+(def ^:dynamic *warn-on-use-after-reduced*
+  "Will throw on `false`."
+  true)
 
 (comment
   (mapv symbol to-overwrite))
@@ -28,13 +16,16 @@
         " Store the collection in a separate coll before using it twice.")
       {})))
 
-(defn print-reuse-warning [type]
-  (prn (format "WARN: Reducible seq was already reduced. Will create %s again. Please cache collection in a separate collection if you want to iterate over it more than once."
-         type)))
+;; Only prints the warning once.
+(def print-reuse-warning
+  (memoize
+    (fn [type]
+      (prn (format "WARN: Reducible seq was already reduced. Will create %s again. Please cache collection in a separate collection if you want to iterate over it more than once."
+             type)))))
 
 (defprotocol IReducibleSeq
-  (seq! [this])
-  (reducible! [this]))
+  (seq! ^clojure.lang.LazySeq [this] "Return a possibly cached lazy seq")
+  (reducible! [this] "Return a reducible object."))
 
 (deftype ReducibleSeq [^:unsynchronized-mutable ls
                        ^:unsynchronized-mutable xf
@@ -94,7 +85,7 @@
 
   clojure.lang.Seqable
   (seq [this]
-    (seq! this))
+    (seq (seq! this)))
 
   clojure.lang.IHashEq
   (hasheq [this]
@@ -130,7 +121,55 @@
 
   clojure.lang.IReduceInit
   (reduce [this rf init]
-    (clojure.core/reduce rf init (reducible! this))))
+    (clojure.core/reduce rf init (reducible! this)))
+
+  ;; Backwards compatibility with LazySeq
+  java.util.List
+  (toArray [this]
+    (.toArray (seq! this)))
+  (toArray [this a]
+    (.toArray (seq! this) a))
+  (containsAll [this coll]
+    (.containsAll (seq! this) coll))
+  (contains [this obj]
+    (.contains (seq! this) obj))
+  (size [this]
+    (.size (seq! this)))
+  (isEmpty [this]
+    (.isEmpty (seq! this)))
+  (iterator [this]
+    (.iterator (seq! this)))
+  (subList [this fromIdx toIdx]
+    (.subList (seq! this) fromIdx toIdx))
+  (indexOf [this obj]
+    (.indexOf (seq! this) obj))
+  (lastIndexOf [this obj]
+    (.lastIndexOf (seq! this) obj))
+  (listIterator [this]
+    (.listIterator (seq! this)))
+  (listIterator [this idx]
+    (.listIterator (seq! this) idx))
+  (get [this idx]
+    (.get (seq! this) idx))
+  (add [this obj]
+    (.add (seq! this) obj))
+  (add [this idx obj]
+    (.add (seq! this) idx obj))
+  (addAll [this idx coll]
+    (.addAll (seq! this) idx coll))
+  (addAll [this coll]
+    (.addAll (seq! this) coll))
+  (clear [this]
+    (.clear (seq! this)))
+  (retainAll [this coll]
+    (.retainAll (seq! this) coll))
+  (removeAll [this coll]
+    (.removeAll (seq! this) coll))
+  (set [this idx obj]
+    (.set (seq! this) idx obj))
+  #_(remove [this obj] (unsupported-ex))
+  #_(remove [this idx] (unsupported-ex))
+  )
 
 (defmethod print-method ReducibleSeq [c w]
   (print-simple (seq c) w))
@@ -139,29 +178,42 @@
   ([xf coll]
    (ReducibleSeq. nil xf coll nil)))
 
-(defmacro defreducible [clj-fn]
-  (let [arg1 (gensym)
-        arg2 (gensym)
-        sym (symbol clj-fn)
-        fq-sym (symbol "clojure.core" clj-fn)]
-    `(defn ~sym
-       ([~arg1] (~fq-sym ~arg1))
-       ([~arg1 ~arg2]
-        (reducible-seq (~fq-sym ~arg1) ~arg2)))))
-
 (comment
+
+  (defmacro defreducible [clj-fn]
+    (let [arg1 (gensym)
+          arg2 (gensym)
+          sym (symbol clj-fn)
+          fq-sym (symbol "clojure.core" clj-fn)]
+      `(defn ~sym
+         ([~arg1] (~fq-sym ~arg1))
+         ([~arg1 ~arg2]
+          (reducible-seq (~fq-sym ~arg1) ~arg2)))))
+
+
+  (def to-overwrite
+    ["map"
+     "filter"
+     "remove"
+     "mapcat"
+     "keep"
+     "keep-indexed"
+     "map-indexed"
+     "partition-all"
+     "take"])
+
   (do
     `(do
        ~@(for [f# to-overwrite]
-           `(~'defreducible ~f#)))))
+           `(~'defreducible ~f#))))
 
-(do
-  (defreducible "map")
-  (defreducible "filter")
-  (defreducible "remove")
-  (defreducible "mapcat")
-  (defreducible "keep")
-  (defreducible "keep-indexed")
-  (defreducible "map-indexed")
-  (defreducible "partition-all")
-  (defreducible "take"))
+  (do
+    (defreducible "map")
+    (defreducible "filter")
+    (defreducible "remove")
+    (defreducible "mapcat")
+    (defreducible "keep")
+    (defreducible "keep-indexed")
+    (defreducible "map-indexed")
+    (defreducible "partition-all")
+    (defreducible "take")))
