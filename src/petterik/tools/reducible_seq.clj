@@ -27,6 +27,10 @@
   (seq! ^clojure.lang.LazySeq [this] "Return a possibly cached lazy seq")
   (reducible! [this] "Return a reducible object."))
 
+;; TODO: Redo this type as a reify with an atom for mutable state.
+;;       Should be enough to see whether it performs well or not.
+;;       (can use a volatile instead of an atom actually).
+
 (deftype ReducibleSeq [^:unsynchronized-mutable ls
                        ^:unsynchronized-mutable xf
                        ^:unsynchronized-mutable coll
@@ -191,11 +195,20 @@
           (reducible-seq (~fq-sym ~arg1) ~arg2)))))
 
 
+  (def to-special-case {"map" (fn [fq-sym arg1 arg2]
+                                (let [more-sym (gensym)]
+                                  `[([~arg1 ~arg2 ~'& ~more-sym]
+                                     (map #(apply ~arg1 %)
+                                       ((fn ~'step [cs#]
+                                          (lazy-seq
+                                            (let [ss# (map seq cs#)]
+                                              (when (every? identity ss#)
+                                                (cons (map first ss#) (~'step (map rest ss#)))))))
+                                        (cons ~arg2 ~more-sym))))]))
+                        "mapcat" nil})
   (def to-overwrite
-    ["map"
-     "filter"
+    ["filter"
      "remove"
-     "mapcat"
      "keep"
      "keep-indexed"
      "map-indexed"
@@ -205,7 +218,7 @@
   (do
     `(do
        ~@(for [f# to-overwrite]
-           `(~'defreducible ~f#))))
+           `(~'defreducible ~f# nil))))
 
   (do
     (defreducible "map")
@@ -216,4 +229,30 @@
     (defreducible "keep-indexed")
     (defreducible "map-indexed")
     (defreducible "partition-all")
-    (defreducible "take")))
+    (defreducible "take"))
+
+
+  (defmacro defreducible2
+    [clj-fn variadic-fn]
+    (let [arg1 (gensym)
+          arg2 (gensym)
+          fq-sym (symbol "clojure.core" clj-fn)]
+      `(alter-var-root (var ~fq-sym)
+         (fn [~'_]
+           (fn
+             ([~arg1] (~fq-sym ~arg1))
+             ([~arg1 ~arg2]
+              (reducible-seq (~fq-sym ~arg1) ~arg2))
+             ~@(when-some [f variadic-fn]
+                 (f fq-sym arg1 arg2)))))))
+
+  (macroexpand-1 '(defreducible2 "take" nil))
+  (defreducible2 "take" nil)
+  (macroexpand-1 '(defreducible2 "map" (get to-special-case "map")))
+
+  ((get to-special-case "map") 'clojure.core/map 'f 'coll)
+
+  (do `(do
+      ~@(range 10)))
+
+  )
