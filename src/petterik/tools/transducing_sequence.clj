@@ -55,7 +55,7 @@
                   (seq (persistent! (xf (deref chunk))))
 
                   ;; The buffer has at least one item, return.
-                  (< 0 (buffer-size buf))
+                  (clojure.lang.Numbers/isPos (buffer-size buf))
                   (return-step s buf)
 
                   :else
