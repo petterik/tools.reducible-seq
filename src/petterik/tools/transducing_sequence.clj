@@ -48,7 +48,7 @@
             ;; Returning the next elements by applying one item
             ;; from the seq at a time to the transducing function.
             (next-elem [s]
-              (loop [s s buf (clear buf)]
+              (loop [buf (xf (clear buf) (first s)) s (next s)]
                 (cond
                   ;; Halting transduction.
                   (reduced? buf)
@@ -58,8 +58,11 @@
                   (clojure.lang.Numbers/isPos (buffer-size buf))
                   (return-step s buf)
 
+                  (nil? s)
+                  (seq (persistent! (xf (clear buf))))
+
                   :else
-                  (recur (next s) (xf buf (first s))))))
+                  (recur (xf buf (first s)) (next s)))))
 
             (next-chunk [s]
               (let [cf (chunk-first s)
@@ -71,11 +74,9 @@
             ;; Gets the next chunk of elements from either
             ;; a chunked seq of a non-chunked seq.
             (step [s]
-              (if (nil? s)
-                (seq (persistent! (xf (clear buf))))
+              (when-some [s (seq s)]
                 (if (chunked-seq? s)
                   (next-chunk s)
-                  (next-elem  s))))]
+                  (next-elem s))))]
       (lazy-seq
-        (when-some [s (seq coll)]
-          (step s))))))
+        (step coll)))))
