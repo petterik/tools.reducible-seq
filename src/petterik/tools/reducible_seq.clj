@@ -23,27 +23,15 @@
       (prn (format "WARN: Reducible seq was already reduced. Will create %s again. Please cache collection in a separate collection if you want to iterate over it more than once."
              type)))))
 
-(defprotocol IReducibleSeq
-  (seq! ^clojure.lang.LazySeq [this] "Return a possibly cached lazy seq")
-  (reducible! [this] "Return a reducible object."))
-
-;; TODO: Redo this type as a reify with an atom for mutable state.
-;;       Should be enough to see whether it performs well or not.
-;;       (can use a volatile instead of an atom actually).
-
-(deftype ReducibleSeq [^:unsynchronized-mutable ls
-                       ^:unsynchronized-mutable xf
-                       ^:unsynchronized-mutable coll
-                       met]
-  IReducibleSeq
-  (seq! [this]
-    (locking this
+(defn- seq!
+  ^clojure.lang.LazySeq
+  [state]
+  (locking state
+    (let [{:keys [ls] :as m} @state]
       (condp = ls
         nil
-        (let [ls (xf-seq/transducing-sequence xf coll)]
-          (set! (.ls this) ls)
-          (set! (.xf this) nil)
-          (set! (.coll this) nil)
+        (let [ls (xf-seq/transducing-sequence (:xf m) (:coll m))]
+          (vreset! state {:ls ls})
           ls)
 
         ;; Warn on reduced and re-create the sequence.
@@ -51,136 +39,135 @@
         (if *warn-on-use-after-reduced*
           (do
             (print-reuse-warning "seq")
-            (set! (.ls this) nil)
-            (seq! this))
+            (vswap! state dissoc :ls)
+            (seq! state))
           (throw-already-reduced-ex))
 
         ;; else, return the created sequence.
-        ls)))
+        ls))))
 
-  (reducible! [this]
-    (locking this
+(defn- reducible!
+  ^clojure.lang.IReduceInit
+  [state]
+  (locking state
+    (let [{:keys [ls xf] :as m} @state]
       (cond
         (seq? ls)
         ls
 
         (some? xf)
-        (let [edu (eduction xf coll)]
+        (let [edu (eduction xf (:coll m))]
           (if (= ::reduced ls)
             (print-reuse-warning "reducible")
-            (set! (.ls this) ::reduced))
-          ;; When we're just warning about reuse, we need the
-          ;; xf and coll to create the seq.
+            (vswap! state :ls ::reduced))
+
           (when (not *warn-on-use-after-reduced*)
-            (set! (.xf this) nil)
-            (set! (.coll this) nil))
+            (vswap! state dissoc :xf :coll))
           edu)
 
         :else
-        (throw-already-reduced-ex))))
+        (throw-already-reduced-ex)))))
 
-  java.io.Serializable
-  clojure.lang.IObj
-  (meta [this] met)
-  (withMeta [this m]
-    (if (identical? met m)
-      this
-      (ReducibleSeq. ls xf coll m)))
+(defn- reducible-seq* [state]
+  (reify
+    clojure.lang.Seqable
+    (seq [_]
+      (seq (seq! state)))
 
-  clojure.lang.Seqable
-  (seq [this]
-    (seq (seq! this)))
+    clojure.lang.IHashEq
+    (hasheq [_]
+      (clojure.lang.Murmur3/hashOrdered (seq! state)))
 
-  clojure.lang.IHashEq
-  (hasheq [this]
-    (clojure.lang.Murmur3/hashOrdered (seq! this)))
+    java.lang.Object
+    (hashCode [this]
+      (if-some [s (.seq this)]
+        (clojure.lang.Util/hash s)
+        1))
+    (equals [this obj]
+      (if-some [s (.seq this)]
+        (.equals s obj)
+        (nil? (clojure.lang.RT/seq obj))))
 
-  java.lang.Object
-  (hashCode [this]
-    (if-some [s (seq this)]
-      (clojure.lang.Util/hash s)
-      1))
-  (equals [this obj]
-    (if-some [s (seq this)]
-      (.equals s obj)
-      (nil? (clojure.lang.RT/seq obj))))
 
-  clojure.lang.Sequential
+    clojure.lang.Sequential
 
-  clojure.lang.IPersistentCollection
-  (count [this]
-    (clojure.lang.RT/length (seq! this)))
-  (cons [this obj]
-    (clojure.lang.RT/cons obj (seq! this)))
-  (empty [this]
-    (clojure.lang.PersistentList/EMPTY))
-  (equiv [this obj]
-    (if-some [s (seq! this)]
-      (.equiv s obj)
-      (nil? (clojure.lang.RT/seq obj))))
+    clojure.lang.IPersistentCollection
+    (count [_]
+      (clojure.lang.RT/length (seq! state)))
+    (cons [_ obj]
+      (clojure.lang.RT/cons obj (seq! state)))
+    (empty [_]
+      (clojure.lang.PersistentList/EMPTY))
+    (equiv [this obj]
+      (if-some [s (.seq this)]
+        (.equiv s obj)
+        (nil? (clojure.lang.RT/seq obj))))
 
-  clojure.lang.IReduce
-  (reduce [this rf]
-    (clojure.core/reduce rf (seq! this)))
+    clojure.lang.IReduce
+    (reduce [_ rf]
+      (clojure.core/reduce rf (seq! state)))
 
-  clojure.lang.IReduceInit
-  (reduce [this rf init]
-    (clojure.core/reduce rf init (reducible! this)))
+    clojure.lang.IReduceInit
+    (reduce [_ rf init]
+      (clojure.core/reduce rf init (reducible! state)))
 
-  ;; Backwards compatibility with LazySeq
-  java.util.List
-  (toArray [this]
-    (.toArray (seq! this)))
-  (toArray [this a]
-    (.toArray (seq! this) a))
-  (containsAll [this coll]
-    (.containsAll (seq! this) coll))
-  (contains [this obj]
-    (.contains (seq! this) obj))
-  (size [this]
-    (.size (seq! this)))
-  (isEmpty [this]
-    (.isEmpty (seq! this)))
-  (iterator [this]
-    (.iterator (seq! this)))
-  (subList [this fromIdx toIdx]
-    (.subList (seq! this) fromIdx toIdx))
-  (indexOf [this obj]
-    (.indexOf (seq! this) obj))
-  (lastIndexOf [this obj]
-    (.lastIndexOf (seq! this) obj))
-  (listIterator [this]
-    (.listIterator (seq! this)))
-  (listIterator [this idx]
-    (.listIterator (seq! this) idx))
-  (get [this idx]
-    (.get (seq! this) idx))
-  (add [this obj]
-    (.add (seq! this) obj))
-  (add [this idx obj]
-    (.add (seq! this) idx obj))
-  (addAll [this idx coll]
-    (.addAll (seq! this) idx coll))
-  (addAll [this coll]
-    (.addAll (seq! this) coll))
-  (clear [this]
-    (.clear (seq! this)))
-  (retainAll [this coll]
-    (.retainAll (seq! this) coll))
-  (removeAll [this coll]
-    (.removeAll (seq! this) coll))
-  (set [this idx obj]
-    (.set (seq! this) idx obj))
-  #_(remove [this obj] (unsupported-ex))
-  #_(remove [this idx] (unsupported-ex))
-  )
+    clojure.lang.IPending
 
-(defmethod print-method ReducibleSeq [c w]
-  (print-simple (seq c) w))
+    ;; Backwards compatibility with LazySeq
+    java.io.Serializable
+    java.util.List
+    (toArray [_]
+      (.toArray (seq! state)))
+    (toArray [_ a]
+      (.toArray (seq! state) a))
+    (containsAll [_ coll]
+      (.containsAll (seq! state) coll))
+    (contains [_ obj]
+      (.contains (seq! state) obj))
+    (size [_]
+      (.size (seq! state)))
+    (isEmpty [_]
+      (.isEmpty (seq! state)))
+    (iterator [_]
+      (.iterator (seq! state)))
+    (subList [_ fromIdx toIdx]
+      (.subList (seq! state) fromIdx toIdx))
+    (indexOf [_ obj]
+      (.indexOf (seq! state) obj))
+    (lastIndexOf [_ obj]
+      (.lastIndexOf (seq! state) obj))
+    (listIterator [_]
+      (.listIterator (seq! state)))
+    (listIterator [_ idx]
+      (.listIterator (seq! state) idx))
+    (get [_ idx]
+      (.get (seq! state) idx))
+    (add [_ obj]
+      (.add (seq! state) obj))
+    (add [_ idx obj]
+      (.add (seq! state) idx obj))
+    (addAll [_ idx coll]
+      (.addAll (seq! state) idx coll))
+    (addAll [_ coll]
+      (.addAll (seq! state) coll))
+    (clear [_]
+      (.clear (seq! state)))
+    (retainAll [_ coll]
+      (.retainAll (seq! state) coll))
+    (removeAll [_ coll]
+      (.removeAll (seq! state) coll))
+    (set [_ idx obj]
+      (.set (seq! state) idx obj))
+    #_(remove [_ obj] (unsupported-ex))
+    #_(remove [_ idx] (unsupported-ex))
+    ))
 
-(defn reducible-seq
-  ([xf coll]
-   (ReducibleSeq. nil xf coll nil)))
+(defn reducible-seq [xf coll]
+  ;; Calling the r-lazy-seq* with the initial state
+  ;; to make sure we're not closing over xf and coll
+  ;; avoiding a potential memory leak.
+  (reducible-seq*
+    (volatile! {:xf xf :coll coll})))
 
 (comment
 
