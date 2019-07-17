@@ -59,7 +59,7 @@
         (let [edu (eduction xf (:coll m))]
           (if (= ::reduced ls)
             (print-reuse-warning "reducible")
-            (vswap! state :ls ::reduced))
+            (vswap! state assoc :ls ::reduced))
 
           (when (not *warn-on-use-after-reduced*)
             (vswap! state dissoc :xf :coll))
@@ -72,36 +72,37 @@
   (reify
     clojure.lang.Seqable
     (seq [_]
-      (seq (seq! state)))
+      (.seq (seq! state)))
 
     clojure.lang.IHashEq
     (hasheq [_]
-      (clojure.lang.Murmur3/hashOrdered (seq! state)))
+      (.hasheq (seq! state)))
 
     java.lang.Object
-    (hashCode [this]
-      (if-some [s (.seq this)]
-        (clojure.lang.Util/hash s)
-        1))
-    (equals [this obj]
-      (if-some [s (.seq this)]
-        (.equals s obj)
-        (nil? (clojure.lang.RT/seq obj))))
+    (hashCode [_]
+      (.hashCode (seq! state)))
+    (equals [_ obj]
+      (.equals (seq! state) obj))
 
 
     clojure.lang.Sequential
+    clojure.lang.ISeq
+    (first [_]
+      (.first (seq! state)))
+    (next [_]
+      (.next (seq! state)))
+    (more [_]
+      (.more (seq! state)))
 
     clojure.lang.IPersistentCollection
     (count [_]
-      (clojure.lang.RT/length (seq! state)))
+      (.count (seq! state)))
     (cons [_ obj]
-      (clojure.lang.RT/cons obj (seq! state)))
+      (.cons (seq! state) obj))
     (empty [_]
       (clojure.lang.PersistentList/EMPTY))
     (equiv [this obj]
-      (if-some [s (.seq this)]
-        (.equiv s obj)
-        (nil? (clojure.lang.RT/seq obj))))
+      (.equiv (seq! state) obj))
 
     clojure.lang.IReduce
     (reduce [_ rf]

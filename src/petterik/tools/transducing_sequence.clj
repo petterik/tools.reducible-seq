@@ -7,9 +7,12 @@
 (defn- buffer:size ^long [^java.util.ArrayList buf]
   (.size buf))
 
-(defn- buffer:conj! [^java.util.ArrayList buf x]
-  (.add buf x)
-  buf)
+(defn- buffer:conj!
+  ([] (java.util.ArrayList.))
+  ([buf] buf)
+  ([^java.util.ArrayList buf x]
+   (.add buf x)
+   buf))
 
 (defn- buffer:nth [^java.util.ArrayList buf ^long index]
   (.get buf index))
