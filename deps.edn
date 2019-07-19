@@ -1,1 +1,2 @@
-{:deps {org.clojure/clojure {:mvn/version "1.10.1"}}}
+{:deps {org.clojure/clojure {:mvn/version "1.10.1"}
+        criterium           {:mvn/version "0.4.5"}}}

@@ -5,8 +5,6 @@
 (def preserving-reduced @#'clojure.core/preserving-reduced)
 
 ;; TODO: Inline buffer:<x> in transducing-sequence.
-(defn- buffer:size ^long [^java.util.ArrayList buf]
-  (.size buf))
 
 (defn- buffer:conj!
   ([] (java.util.ArrayList.))
@@ -15,15 +13,76 @@
    (.add buf x)
    buf))
 
+(def xf-seq
+  (letfn [(buffer-cons [^java.util.ArrayList buf more]
+            ;; TODO: As `case` was a massive improvement
+            ;;       (2x faster on a dechunked example)
+            ;;       Add additional cases? for 2, 3, 4, etc?
+            (case (.size buf)
+              0 more
+              1 (cons (.get buf 0) more)
+              ;; else
+              (clojure.lang.ChunkedCons.
+                (clojure.lang.ArrayChunk. (.toArray buf))
+                more)))
+
+          (return-step [s xf rrf buf]
+            (buffer-cons buf
+              (lazy-seq
+                (step s xf rrf buf))))
+
+          ;; Returning the next elements by applying one item
+          ;; from the seq at a time to the transducing function.
+          (next-cons [s xf rrf buf]
+            (loop [buf (xf buf (first s)) s (next s)]
+              (if (reduced? buf)
+                ;; Halting transduction.
+                (buffer-cons (xf (deref buf)) nil)
+                (if (clojure.lang.Numbers/isPos (.size ^java.util.ArrayList buf))
+                  ;; The buffer has at least one item, return.
+                  (return-step s xf rrf buf)
+                  (if (some? s)
+                    (recur (xf buf (first s)) (next s))
+                    ;; End of sequence.
+                    ;; No need to clear buf as we've checked
+                    ;; whether it contains anything
+                    (buffer-cons (xf buf) nil))))))
+
+          (next-chunk [s xf rrf buf]
+            (let [cf (chunk-first s)
+                  buf (unreduced (.reduce cf rrf buf))]
+              (if (reduced? buf)
+                (buffer-cons (xf (deref buf)) nil)
+                (return-step (chunk-next s) xf rrf buf))))
+
+          ;; Gets the next chunk of elements from either
+          ;; a chunked seq of a non-chunked seq.
+          (step [s xf rrf buf]
+            (.clear ^java.util.ArrayList buf)
+            (if-some [s (seq s)]
+              (if (chunked-seq? s)
+                (next-chunk s xf rrf buf)
+                (next-cons s xf rrf buf))
+              (buffer-cons (xf buf) nil)))]
+    (fn [xform coll]
+      (let [xf (xform buffer:conj!)
+            rrf (preserving-reduced xf)
+            buf (java.util.ArrayList.)]
+        (lazy-seq
+          (step coll xf rrf buf))))))
+
 (defn- buffer:nth [^java.util.ArrayList buf ^long index]
   (.get buf index))
 
-(defn buffer:persistent! [^java.util.ArrayList buf]
-  (clojure.lang.PersistentVector/create ^java.lang.Iterable buf))
+(defn- buffer:size ^long [^java.util.ArrayList buf]
+  (.size buf))
 
 (defn buffer:clear! [^java.util.ArrayList buf]
   (.clear buf)
   buf)
+
+(defn buffer:persistent! [^java.util.ArrayList buf]
+  (clojure.lang.PersistentVector/create ^java.lang.Iterable buf))
 
 (defn transducing-sequence [xform coll]
   (let [xf (xform buffer:conj!)
