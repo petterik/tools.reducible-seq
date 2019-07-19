@@ -31,7 +31,7 @@
               (lazy-seq
                 (step s xf rrf buf))))
 
-          (next-thing [s xf rrf buf]
+          (step* [s xf rrf buf]
             (if (chunked-seq? s)
               (let [buf (unreduced (.reduce (chunk-first s) rrf buf))]
                 (if (reduced? buf)
@@ -55,14 +55,14 @@
           (step [s xf rrf buf]
             (.clear ^java.util.ArrayList buf)
             (if-some [s (seq s)]
-              (next-thing s xf rrf buf)
+              (step* s xf rrf buf)
               (buffer-cons (xf buf) nil)))]
     (fn [xform coll]
-      (let [xf (xform buffer:conj!)
-            rrf (preserving-reduced xf)
-            buf (java.util.ArrayList.)]
-        (lazy-seq
-          (step coll xf rrf buf))))))
+      (lazy-seq
+        (when-some [s (seq coll)]
+          (let [xf (xform buffer:conj!)
+                rrf (preserving-reduced xf)]
+            (step s xf rrf (java.util.ArrayList.))))))))
 
 (defn- buffer:nth [^java.util.ArrayList buf ^long index]
   (.get buf index))
