@@ -4,6 +4,7 @@
 
 (def preserving-reduced @#'clojure.core/preserving-reduced)
 
+;; TODO: Inline buffer:<x> in transducing-sequence.
 (defn- buffer:size ^long [^java.util.ArrayList buf]
   (.size buf))
 
@@ -38,9 +39,10 @@
                     (cons (buffer:nth chunk 0)
                       (step s)))
                 ;; else
-                (lazy-cat
+                (concat
                   (buffer:persistent! chunk)
-                  (step s))))
+                  (lazy-seq
+                    (step s)))))
 
             ;; Returning the next elements by applying one item
             ;; from the seq at a time to the transducing function.
