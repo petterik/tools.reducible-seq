@@ -26,43 +26,36 @@
                 (clojure.lang.ArrayChunk. (.toArray buf))
                 more)))
 
-          (return-step [s xf rrf buf]
+          (yield-aseq [s xf rrf buf]
             (buffer-cons buf
               (lazy-seq
                 (step s xf rrf buf))))
 
-          ;; Returning the next elements by applying one item
-          ;; from the seq at a time to the transducing function.
-          (next-cons [s xf rrf buf]
-            (loop [buf (xf buf (first s)) s (next s)]
-              (if (reduced? buf)
-                ;; Halting transduction.
-                (buffer-cons (xf (deref buf)) nil)
-                (if (clojure.lang.Numbers/isPos (.size ^java.util.ArrayList buf))
-                  ;; The buffer has at least one item, return.
-                  (return-step s xf rrf buf)
-                  (if (some? s)
-                    (recur (xf buf (first s)) (next s))
-                    ;; End of sequence.
-                    ;; No need to clear buf as we've checked
-                    ;; whether it contains anything
-                    (buffer-cons (xf buf) nil))))))
-
-          (next-chunk [s xf rrf buf]
-            (let [cf (chunk-first s)
-                  buf (unreduced (.reduce cf rrf buf))]
-              (if (reduced? buf)
-                (buffer-cons (xf (deref buf)) nil)
-                (return-step (chunk-next s) xf rrf buf))))
+          (next-thing [s xf rrf buf]
+            (if (chunked-seq? s)
+              (let [buf (unreduced (.reduce (chunk-first s) rrf buf))]
+                (if (reduced? buf)
+                  (buffer-cons (xf (deref buf)) nil)
+                  (yield-aseq (chunk-rest s) xf rrf buf)))
+              (let [buf (xf buf (first s))
+                    s (rest s)]
+                (if (reduced? buf)
+                  (buffer-cons (xf (deref buf)) nil)
+                  (if (clojure.lang.Numbers/isPos (.size ^java.util.ArrayList buf))
+                    (yield-aseq s xf rrf buf)
+                    ;; Unable to get an item, recur inside this
+                    ;; function with the next seq to avoid blowing
+                    ;; the stack.
+                    (if-some [s (seq s)]
+                      (recur s xf rrf buf)
+                      (buffer-cons (xf buf) nil)))))))
 
           ;; Gets the next chunk of elements from either
           ;; a chunked seq of a non-chunked seq.
           (step [s xf rrf buf]
             (.clear ^java.util.ArrayList buf)
             (if-some [s (seq s)]
-              (if (chunked-seq? s)
-                (next-chunk s xf rrf buf)
-                (next-cons s xf rrf buf))
+              (next-thing s xf rrf buf)
               (buffer-cons (xf buf) nil)))]
     (fn [xform coll]
       (let [xf (xform buffer:conj!)
