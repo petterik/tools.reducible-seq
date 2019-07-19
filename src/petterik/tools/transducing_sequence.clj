@@ -62,7 +62,13 @@
         (when-some [s (seq coll)]
           (let [xf (xform buffer:conj!)
                 rrf (preserving-reduced xf)]
-            (step s xf rrf (java.util.ArrayList.))))))))
+            ;; Sets arraylist capacity to 4 such that it's small
+            ;; which is good for non-chunked seqs and grows larger
+            ;; than 32 (size of standard chunk-seq) after 2 growths:
+            ;; Size after 1st growth: 4+8=12
+            ;; Size after 2nd growth: 12+24=36
+            ;; TODO: Benchmark whether this is a good number or not.
+            (step s xf rrf (java.util.ArrayList. 4))))))))
 
 (defn- buffer:nth [^java.util.ArrayList buf ^long index]
   (.get buf index))
