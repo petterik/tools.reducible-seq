@@ -13,6 +13,35 @@
    (.add buf x)
    buf))
 
+(def ^:const ^long xf-seq-buffer-capacity
+  "Initial size of xf-seq's internal buffer.
+
+  Chooses the capacity less than 11 which takes
+  the least amount of times to grow an ArrayList
+  past 32 (the size of chunked-seqs) which also
+  minimizes the extra space"
+  (->> (for [capacity (range 1 11)
+             :let [growth (transduce (halt-when #(<= 32 %) conj)
+                            conj
+                            []
+                            (iterate #(* % 3) capacity))
+                   extra-space (- (last growth) 32)]]
+         [(count growth) extra-space capacity])
+    (sort)
+    (first)
+    (last)
+    (long)))
+;; => 4
+
+(comment
+  ;; Regarding ArrayList capacity
+
+  ;; => 4
+
+  ;; Number 11 is the best number within the range of
+  ;; 1 and 32, but it's quite large for non-chunked seqs.
+  )
+
 (def xf-seq
   (letfn [(buffer-cons [^java.util.ArrayList buf more]
             ;; TODO: As `case` was a massive improvement
@@ -62,13 +91,7 @@
         (when-some [s (seq coll)]
           (let [xf (xform buffer:conj!)
                 rrf (preserving-reduced xf)]
-            ;; Sets arraylist capacity to 4 such that it's small
-            ;; which is good for non-chunked seqs and grows larger
-            ;; than 32 (size of standard chunk-seq) after 2 growths:
-            ;; Size after 1st growth: 4+8=12
-            ;; Size after 2nd growth: 12+24=36
-            ;; TODO: Benchmark whether this is a good number or not.
-            (step s xf rrf (java.util.ArrayList. 4))))))))
+            (step s xf rrf (java.util.ArrayList. xf-seq-buffer-capacity))))))))
 
 (defn- buffer:nth [^java.util.ArrayList buf ^long index]
   (.get buf index))
