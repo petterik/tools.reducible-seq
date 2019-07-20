@@ -30,7 +30,7 @@
     (let [{:keys [ls] :as m} @state]
       (condp = ls
         nil
-        (let [ls (xf-seq/transducing-sequence (:xf m) (:coll m))]
+        (let [ls (xf-seq/xf-seq (:xf m) (:coll m))]
           (vreset! state {:ls ls})
           ls)
 
