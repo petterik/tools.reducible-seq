@@ -20,15 +20,16 @@
   the least amount of times to grow an ArrayList
   past 32 (the size of chunked-seqs) which also
   minimizes the extra space"
-  (->> (for [capacity (range 1 11)
-             :let [growth (transduce (halt-when #(<= 32 %) conj)
+  (->>
+    (for [capacity (range 1 11)
+             :let   [growth (transduce (halt-when #(<= 32 %) conj)
                             conj
                             []
                             (iterate #(* % 3) capacity))
                    extra-space (- (last growth) 32)]]
          [(count growth) extra-space capacity])
     (sort)
-    (first)
+       (first)
     (last)
     (long)))
 ;; => 4
@@ -92,3 +93,7 @@
           (let [xf (xform buffer:conj!)
                 rrf (preserving-reduced xf)]
             (step s xf rrf (java.util.ArrayList. xf-seq-buffer-capacity))))))))
+
+
+(defn foo []
+  (-> (assoc {} :1 2)))
