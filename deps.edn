@@ -1,2 +1,40 @@
-{:deps {org.clojure/clojure {:mvn/version "1.10.1"}
-        criterium           {:mvn/version "0.4.5"}}}
+{:deps
+ {org.clojure/clojure {:mvn/version "1.11.0-master-SNAPSHOT"}
+  criterium           {:mvn/version "0.4.5"}}
+
+ :aliases
+ {:java9+
+  {:jvm-opts ["--add-modules" "java.xml.bind"]}
+  :epsilon-gc
+  {:jvm-opts ["-XX:+UnlockExperimentalVMOptions"
+              "-XX:+UseEpsilonGC"
+              "-Xlog:gc"]}
+  :heap-dump
+  {:jvm-opts ["-XX:+HeapDumpOnOutOfMemoryError"]}
+
+  :xmx1g
+  {:jvm-opts ["-Xmx1g"]}
+  :xmx2g
+  {:jvm-opts ["-Xmx2g"]}
+  :xmx4g
+  {:jvm-opts ["-Xmx4g"]}
+  :xmx6g
+  {:jvm-opts ["-Xmx6g"]}
+
+  :dechunked
+  {:jvm-opts ["-Dpetterik.bench.dechunk=true"]}
+
+  :bench-stacked-seq
+  {:main-opts
+   ["-m" "petterik.tools.bench-new-seqs" "stacked-seq"]}
+  :bench-consumable
+  {:main-opts
+   ["-m" "petterik.tools.bench-new-seqs" "consumable"]}
+  :bench-xf-seq
+  {:main-opts
+   ["-m" "petterik.tools.bench-new-seqs" "xf-seq"]}
+  :bench-vanilla
+  {:extra-deps {org.clojure/clojure {:mvn/version "1.10.1"}}
+   :main-opts  ["-m" "petterik.tools.bench-old-seqs"]}}
+
+ }

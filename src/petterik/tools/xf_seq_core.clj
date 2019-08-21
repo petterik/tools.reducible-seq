@@ -1,6 +1,6 @@
 (ns petterik.tools.xf-seq-core)
 
-(def ^:static xf-seq
+(def ^:static xf-seq-1
   (let [step (clojure.lang.Var/create)
 
         buffer-cons (fn [^java.util.ArrayList buf more]
@@ -104,3 +104,76 @@
         (let [s (seq coll)]
           (when s
             (step s (xform arr-conj!) (java.util.ArrayList. 4))))))))
+
+;; Final form?
+
+(defn ^:private ^:static xf-seq-step
+  [^clojure.lang.ISeq s ^clojure.lang.IFn xf ^java.util.ArrayList buf]
+  (if s
+    (if (chunked-seq? s)
+      (if (clojure.lang.Util/identical buf (.reduce (chunk-first ^clojure.lang.IChunkedSeq s) xf buf))
+        (let [size (.size buf)]
+          (case* size 0 0
+            ;;else
+            (clojure.lang.ChunkedCons. (clojure.lang.ArrayChunk. (.toArray buf))
+              ^clojure.lang.ISeq
+              (do
+                (.clear buf)
+                (lazy-seq
+                  (xf-seq-step (chunk-next ^clojure.lang.IChunkedSeq s) xf buf))))
+            {0 [0 (recur (chunk-next ^clojure.lang.IChunkedSeq s) xf buf)]
+             1 [1 (clojure.lang.Cons. (.get buf 0)
+                    ^clojure.lang.ISeq
+                    (do
+                      (.clear buf)
+                      (lazy-seq
+                        (xf-seq-step (chunk-next ^clojure.lang.IChunkedSeq s) xf buf))))]}
+            :compact
+            :int))
+        (recur nil xf buf))
+      (if (clojure.lang.Util/identical buf (xf buf (.first s)))
+        (let [size (.size buf)]
+          (case* size 0 0
+            (clojure.lang.ChunkedCons. (clojure.lang.ArrayChunk. (.toArray buf))
+              ^clojure.lang.ISeq
+              (do
+                (.clear buf)
+                (lazy-seq
+                  (xf-seq-step (.next s) xf buf))))
+            {0 [0 (recur (.next s) xf buf)]
+             1 [1 (clojure.lang.Cons.
+                    (.get buf 0)
+                    ^clojure.lang.ISeq
+                    (do
+                      (.clear buf)
+                      (lazy-seq
+                        (xf-seq-step (.next s) xf buf))))]}
+            :compact
+            :int))
+        (recur nil xf buf)))
+    (do
+      (xf buf)
+      (let [size (.size buf)]
+        (case* size 0 0
+          ;; else
+          (clojure.lang.ChunkedCons. (clojure.lang.ArrayChunk. (.toArray buf)) nil)
+          ;; cases
+          {0 [0 nil]
+           1 [1 (clojure.lang.Cons. (.get buf 0) nil)]}
+          :compact
+          :int)))))
+
+(def ^:static xf-seq-arr-conj!
+  (fn
+    ([] (java.util.ArrayList.))
+    ([buf] buf)
+    ([buf x]
+     (.add ^java.util.ArrayList buf x)
+     buf)))
+
+(def ^:static xf-seq
+  (fn xf-seq [xform coll]
+    (lazy-seq
+      (let [s (seq coll)]
+        (if s
+          (xf-seq-step s (xform xf-seq-arr-conj!) (java.util.ArrayList. 4)))))))
