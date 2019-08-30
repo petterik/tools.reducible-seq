@@ -1,6 +1,7 @@
 {:deps
- {org.clojure/clojure {:mvn/version "1.11.0-master-SNAPSHOT"}
-  criterium           {:mvn/version "0.4.5"}}
+ {org.clojure/clojure     {:mvn/version "1.11.0-master-SNAPSHOT"}
+  criterium               {:mvn/version "0.4.5"}
+  com.hypirion/clj-xchart {:mvn/version "0.2.0"}}
 
  :aliases
  {:java9+
@@ -9,6 +10,9 @@
   {:jvm-opts ["-XX:+UnlockExperimentalVMOptions"
               "-XX:+UseEpsilonGC"
               "-Xlog:gc"]}
+
+  :1.10.0
+  {:extra-deps {org.clojure/clojure {:mvn/version "1.10.1"}}}
   :heap-dump
   {:jvm-opts ["-XX:+HeapDumpOnOutOfMemoryError"]}
 
@@ -24,6 +28,10 @@
   :dechunked
   {:jvm-opts ["-Dpetterik.bench.dechunk=true"]}
 
+  :bench-seqs
+  {:main-opts
+   ["-m" "petterik.tools.bench.seqs"]}
+
   :bench-stacked-seq
   {:main-opts
    ["-m" "petterik.tools.bench-new-seqs" "stacked-seq"]}
@@ -34,7 +42,6 @@
   {:main-opts
    ["-m" "petterik.tools.bench-new-seqs" "xf-seq"]}
   :bench-vanilla
-  {:extra-deps {org.clojure/clojure {:mvn/version "1.10.1"}}
-   :main-opts  ["-m" "petterik.tools.bench-old-seqs"]}}
+  {:main-opts  ["-m" "petterik.tools.bench-old-seqs"]}}
 
  }
