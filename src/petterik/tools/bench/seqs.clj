@@ -76,8 +76,18 @@
   (fn [^long num]
     (< num (long (/ *size* 4)))))
 
+
+(def nil-vectors (into {}
+                   (map (juxt identity #(into [] (repeat % nil))))
+                   sizes))
+
 (defn nils []
-  (repeat *size* nil))
+  (or
+    (get nil-vectors *size*)
+    (throw (ex-info
+             (str "Unable to get a vector of nils for size: " *size*)
+             {:size            *size*
+              :nil-vector-keys (keys nil-vectors)}))))
 
 (defn nums []
   (range *size*))
