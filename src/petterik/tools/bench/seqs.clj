@@ -36,7 +36,7 @@
      (vec
        (for [size# sizes]
          (binding [*size* size#]
-           (let [res# (crit/benchmark ~(list `reduce `rf-nil nil expr) {})
+           (let [res# (crit/benchmark ~(list `reduce `rf-nil nil `(common/maybe-dechunk ~expr)) {})
                  ret# (into {:id           id#
                              :size         size#
                              :clj-version  clj-version
