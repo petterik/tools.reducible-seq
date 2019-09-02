@@ -74,7 +74,7 @@
 
 (defn quarter-pred []
   (fn [^long num]
-    (< num (long (/ *size* 4)))))
+    (< num (long (/ ^long *size* 4)))))
 
 
 (def nil-vectors (into {}
@@ -89,8 +89,12 @@
              {:size            *size*
               :nil-vector-keys (keys nil-vectors)}))))
 
+(def ranges (into {}
+              (map (juxt identity #(doall (range %))))
+              sizes))
+
 (defn nums []
-  (range *size*))
+  (get ranges *size*))
 
 ;; TODO: Rebind repeat and range to maybe dechunk
 (defn -main [& args]
@@ -112,16 +116,20 @@
   (run-bench :drop/all (drop (all) (nils)))
   #_(run-bench :drop/half (drop (half) (nils)))
   (run-bench :drop/quarter (drop (quarter) (nils)))
+  (run-bench :drop/one (drop 1 (nils)))
 
   (run-bench :drop-while/all (drop-while (all-pred) (nums)))
   #_(run-bench :drop-while/half (drop-while (half-pred) (nums)))
   (run-bench :drop-while/quarter (drop-while (quarter-pred) (nums)))
+  (run-bench :drop-while/one (drop-while #{0} (nums)))
 
   (run-bench :take-nth/all (take-nth (all) (nils)))
   #_(run-bench :take-nth/half (take-nth (half) (nils)))
   (run-bench :take-nth/quarter (take-nth (quarter) (nils)))
 
   (run-bench :distinct/numbers (distinct (nums)))
+  (run-bench :distinct/tenth (let [v (get nil-vectors (long (/ *size* 10)) [])]
+                               (distinct (apply concat (repeat 10 v)))))
 
   (run-bench :interpose/nils (interpose nil (nils)))
 
@@ -138,9 +146,10 @@
   (run-bench :map-indexed/identity (map-indexed #(do %2) (nils)))
   (run-bench :map-indexed/inc (map-indexed #(inc %2) (nums)))
 
-  (run-bench :keep/all (keep (all-pred) (nums)))
+  (run-bench :keep/all (keep identity (nums)))
   #_(run-bench :keep/half (keep (half-pred) (nums)))
-  (run-bench :keep/quarter (keep (quarter-pred) (nums)))
+  (let [pred (quarter-pred)]
+    (run-bench :keep/quarter (keep #(when (pred %) %) (nums))))
 
   (run-bench :keep-indexed/all (keep-indexed (let [pred (all-pred)] #(pred %2)) (nums)))
   #_(run-bench :keep-indexed/half (keep-indexed (let [pred (half-pred)] #(pred %2)) (nums)))
@@ -148,7 +157,7 @@
 
   (run-bench :dedupe/none (dedupe (nums)))
   #_(run-bench :dedupe/half (dedupe (repeat 2 (long (/ *size* 2)))))
-  (run-bench :dedupe/quarter (dedupe (repeat 4 (long (/ *size* 4)))))
+  #_(run-bench :dedupe/quarter (dedupe (repeat 4 (long (/ *size* 4)))))
 
   (println (format "Done benchmarking %s %s %s!" chunked? clj-version java-version))
   )
