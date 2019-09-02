@@ -14,3 +14,7 @@ pom.xml.asc
 /.idea
 /*.iml
 /.cpcache
+
+.DS_Store
+chunked-charts
+dechunked-charts
