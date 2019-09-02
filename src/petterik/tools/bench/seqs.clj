@@ -139,7 +139,7 @@
   (run-bench :take-nth/quarter (take-nth (quarter) (nils)))
 
   (run-bench :distinct/numbers (distinct (nums)))
-  (run-bench :distinct/tenth (let [v (get nil-vectors (long (/ *size* 10)) [])]
+  #_(run-bench :distinct/tenth (let [v (get nil-vectors (long (/ *size* 10)) [])]
                                (distinct (apply concat (repeat 10 v)))))
 
   (run-bench :interpose/nils (interpose nil (nils)))
