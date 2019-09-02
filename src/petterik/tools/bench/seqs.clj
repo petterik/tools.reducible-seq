@@ -21,7 +21,7 @@
 (def java-version (System/getProperty "java.version"))
 (def chunked? (not (common/dechunk?)))
 (def quick-round? (Boolean/parseBoolean
-                    (System/getProperty "quick")))
+                    (System/getProperty "petterik.bench.quick")))
 
 (def rf-nil
   (fn
@@ -31,9 +31,11 @@
 
 
 
-(def bench-fn (if quick-round?
-                crit/quick-benchmark
-                crit/benchmark))
+(defmacro bench [& body]
+  (let [bench-fn# (if quick-round?
+                    `crit/quick-benchmark
+                    `crit/benchmark)]
+    `(~bench-fn# ~@body)))
 
 (def sizes (if quick-round?
              [10 max-size]
@@ -41,11 +43,11 @@
 
 (defmacro run-bench [id expr]
   `(let [id# ~id]
-     (println "Running bench: " id# " ...")
+     (println "Running bench: " id# " ..." (when quick-round? "(quickly!)"))
      (vec
        (for [size# sizes]
          (binding [*size* size#]
-           (let [res# (bench-fn ~(list `reduce `rf-nil nil `(common/maybe-dechunk ~expr)) {})
+           (let [res# (bench ~(list `reduce `rf-nil nil `(common/maybe-dechunk ~expr)) {})
                  ret# (into {:id           id#
                              :size         size#
                              :clj-version  clj-version
