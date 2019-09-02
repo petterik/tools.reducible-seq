@@ -20,7 +20,8 @@
 (def clj-version (clojure-version))
 (def java-version (System/getProperty "java.version"))
 (def chunked? (not (common/dechunk?)))
-
+(def quick-round? (Boolean/parseBoolean
+                    (System/getProperty "quick")))
 
 (def rf-nil
   (fn
@@ -28,7 +29,15 @@
     ([x] x)
     ([x _] x)))
 
-(def sizes (take-while #(<= % max-size) (iterate #(* 10 %) 10)))
+
+
+(def bench-fn (if quick-round?
+                crit/quick-benchmark
+                crit/benchmark))
+
+(def sizes (if quick-round?
+             [10 max-size]
+             (take-while #(<= % max-size) (iterate #(* 10 %) 10))))
 
 (defmacro run-bench [id expr]
   `(let [id# ~id]
@@ -36,7 +45,7 @@
      (vec
        (for [size# sizes]
          (binding [*size* size#]
-           (let [res# (crit/benchmark ~(list `reduce `rf-nil nil `(common/maybe-dechunk ~expr)) {})
+           (let [res# (bench-fn ~(list `reduce `rf-nil nil `(common/maybe-dechunk ~expr)) {})
                  ret# (into {:id           id#
                              :size         size#
                              :clj-version  clj-version

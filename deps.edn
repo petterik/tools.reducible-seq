@@ -27,6 +27,8 @@
 
   :dechunked
   {:jvm-opts ["-Dpetterik.bench.dechunk=true"]}
+  :quick
+  {:jvm-opts ["-Dpetterik.bench.quick=true"]}
 
   :bench-seqs
   {:main-opts
