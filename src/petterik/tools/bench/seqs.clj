@@ -41,34 +41,46 @@
              [10 max-size]
              (take-while #(<= % max-size) (iterate #(* 10 %) 10))))
 
-(defmacro run-bench [id expr]
-  `(let [id# ~id]
-     (println "Running bench: " id# " ..." (when quick-round? "(quickly!)"))
+(defmacro run-bench*
+  [id sizes opts expr]
+  {:pre [(:main opts)]}
+  `(let [id# ~id
+         opts# ~opts
+         sizes# ~sizes]
      (vec
-       (for [size# sizes]
+       (for [size# sizes#]
          (binding [*size* size#]
            (let [res# (bench ~(list `reduce `rf-nil nil `(common/maybe-dechunk ~expr)) {})
-                 ret# (into {:id           id#
-                             :size         size#
-                             :clj-version  clj-version
-                             :java-version java-version
-                             :chunked?     chunked?}
+                 ret# (into (merge
+                              opts#
+                              {:id           id#
+                               :size         size#
+                               :clj-version  clj-version
+                               :java-version java-version
+                               :chunked?     chunked?})
                         (map #(update % 1 first))
                         (select-keys res# [:mean :lower-q :upper-q]))
-                 file# (format "bench-%s-%s-%s.edn"
+                 file# (format "bench-%s-%s-%s-%s.edn"
                          (if chunked? "chunked" "dechunked")
                          clj-version
-                         java-version)]
+                         java-version
+                         (:main opts#))]
              (spit file# ret# :append true)
              (spit file# "\n" :append true)
              ret#))))))
+
+(defmacro run-bench
+  [id expr]
+  `(do
+     (println "Running bench: " ~id " ..." (when quick-round? "(quickly!)"))
+     (run-bench* ~id sizes {:main "seqs"} ~expr)))
 
 (defn ^:static divisible [div]
   (fn [^long num]
     (zero? (rem num div))))
 
 (defn all []
-  *size*)
+  ^long *size*)
 
 (defn half []
   (long (/ *size* 2)))

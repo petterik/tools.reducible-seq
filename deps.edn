@@ -33,6 +33,9 @@
   :bench-seqs
   {:main-opts
    ["-m" "petterik.tools.bench.seqs"]}
+  :bench-consumables
+  {:main-opts
+   ["-m" "petterik.tools.bench.consumables"]}
 
   :bench-stacked-seq
   {:main-opts

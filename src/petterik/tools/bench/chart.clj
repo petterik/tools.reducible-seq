@@ -59,7 +59,10 @@
     (.getAbsolutePath
       (io/file
         output-dir
-        (str (string/replace (:title (bean chart)) "/" "_") ".png")))))
+        (-> (:title (bean chart))
+          (string/replace #"[/ ]" "_")
+          (string/replace #"[\[\]\(\)\?]" "")
+          (str  ".png"))))))
 
 (defn -main [& [output-dir & files]]
   {:pre [(.isDirectory (io/file output-dir))
