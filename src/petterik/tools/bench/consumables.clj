@@ -8,14 +8,12 @@
 (def form-counts
   (if bench.seqs/quick-round?
     [8]
-    (->> (range)
-      (map (comp long #(Math/pow 2 %)))
-      (take-while #(<= % max-power)))))
+    [2 8 32]))
 
 (def sizes
   (if bench.seqs/quick-round?
     [1000]
-    [10 1000 10000]))
+    [100 10000]))
 
 (def ^:dynamic *form-count*)
 
@@ -43,7 +41,7 @@
   (into {}
     (for [size sizes
           data (one-if-quick [(range size) (repeat size 0)])
-          ctor (one-if-quick [vec identity #_set])
+          ctor (one-if-quick [vec doall #_set])
           :let [dataset (ctor data)
                 type (.getSimpleName (type dataset))
                 id (str type ":" size)]]
