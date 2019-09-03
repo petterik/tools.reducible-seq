@@ -139,10 +139,6 @@
                        (rem ^long (inc x) n))))
         x))))
 
-(defn nth-part [n]
-  (fn [x]
-    (long (/ x n))))
-
 (defn idx-identity [idx x]
   x)
 
@@ -183,7 +179,6 @@
 (defbench (interpose nil))
 
 (defbench (partition-by identity))
-(defbench (partition-by (nth-part 48)))
 
 (defbench (partition-all 1))
 (defbench (partition-all 32))
