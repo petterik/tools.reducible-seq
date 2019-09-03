@@ -90,7 +90,8 @@
 
 (defmacro defbench [& forms]
   (let [sym# (-> (str forms)
-               (string/replace #"[^A-Za-z0-9]" "")
+               (string/replace #"[^A-Za-z0-9]" "_")
+               (string/replace #"_+" "_")
                (->> (str "_bench_"))
                (symbol))]
     `(def ~(with-meta sym# {::bench true})
@@ -204,41 +205,7 @@
 (defn -main [& args]
   ;; *ns* is not set when main is called. Who knew?
   (in-ns 'petterik.tools.bench.consumables)
-  (doseq [[k v] (ns-publics *ns*)
-          :when (::bench (meta v))]
+  (doseq [[_ v] (into (sorted-map)
+                  (filter (comp ::bench meta val))
+                  (ns-publics *ns*))]
     (v)))
-
-(comment
-
-  (macroexpand-1 '(defbench (map identity)))
-  (defbench (map identity))
-
-  (doseq [[_ dataset] datasets]
-    (bench-consumables dataset (map identity)))
-
-  (petterik.tools.bench.consumables/bench-forms
-    "((clojure.core/map clojure.core/identity))"
-    {:type "LongRange", :size 10}
-    (clojure.core/get-in petterik.tools.bench.consumables/datasets ["LongRange:10" :data])
-    [(clojure.core/identity)]
-    ((clojure.core/map clojure.core/identity)))
-
-  (bench-forms :map/identity
-    {:consumable? true}
-    data
-    (consumable!)
-    (map identity))
-  (bench-forms :map/identity
-    {:consumable? true
-     }
-    data
-    (consumable!)
-    (map identity))
-
-  (macroexpand '(bench-forms :map/identity
-                  {:consumable? true}
-                  v
-                  (consumable!)
-                  (map identity)))
-  )
-
