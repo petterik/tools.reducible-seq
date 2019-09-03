@@ -4,14 +4,18 @@
     [clojure.string :as string]))
 
 
-(def max-power 64)
-(def form-counts (->> (range)
-                   (map (comp long #(Math/pow 2 %)))
-                   (take-while #(<= % max-power))))
+(def max-power 16)
+(def form-counts
+  (if bench.seqs/quick-round?
+    [8]
+    (->> (range)
+      (map (comp long #(Math/pow 2 %)))
+      (take-while #(<= % max-power)))))
 
-(def sizes (if bench.seqs/quick-round?
-             [1000]
-             [10 1000 10000]))
+(def sizes
+  (if bench.seqs/quick-round?
+    [1000]
+    [10 1000 10000]))
 
 (def ^:dynamic *form-count*)
 
@@ -144,6 +148,9 @@
 (defn idx-inc [idx x]
   (inc x))
 
+(defn range-max [n]
+  (fn [x] (range (min n x))))
+
 
 (defbench (map identity))
 
@@ -192,7 +199,7 @@
 
 (defbench (dedupe))
 
-(defbench (mapcat (fn [x] (range (min 100 x)))))
+(defbench (mapcat (range-max 50)) (take (all)))
 
 (defn -main [& args]
   ;; *ns* is not set when main is called. Who knew?
