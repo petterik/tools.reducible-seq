@@ -23,11 +23,10 @@
 (def quick-round? (Boolean/parseBoolean
                     (System/getProperty "petterik.bench.quick")))
 
-(def rf-nil
-  (fn
-    ([])
-    ([x] x)
-    ([x _] x)))
+(defn rf-nil
+  ([])
+  ([x] x)
+  ([x _] x))
 
 
 

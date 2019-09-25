@@ -11,6 +11,9 @@
               "-XX:+UseEpsilonGC"
               "-Xlog:gc"]}
 
+  :direct
+  {:jvm-opts ["-Dclojure.compiler.direct-linking=true"]}
+
   :1.10.0
   {:extra-deps {org.clojure/clojure {:mvn/version "1.10.1"}}}
   :heap-dump

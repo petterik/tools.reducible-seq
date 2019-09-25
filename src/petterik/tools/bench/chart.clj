@@ -3,42 +3,77 @@
     [clojure.java.io :as io]
     [clojure.string :as string]
     [com.hypirion.clj-xchart :as xchart])
-  (:import [java.io File]))
+  (:import [java.io File]
+           [javax.swing JFrame SwingUtilities JPanel JTabbedPane JScrollPane BorderFactory]
+           [java.awt GridLayout BorderLayout]
+           [org.knowm.xchart XChartPanel]))
 
+(def colors
+  (mapv (fn [color marker]
+         {:line-color   color
+          :marker-color color
+          :marker-type  marker})
+    (keys (dissoc xchart/colors :yellow))
+    (cycle (keys xchart/markers))))
+
+(defn bench-data->chart-data [bench-data]
+  (let [chart-keys [:id :type #_:form-count]
+        mark-keys (conj chart-keys :clj-version :consumable? :seq? ::file-idx)
+
+        mark->chart-id (comp
+                         (memoize
+                           (fn [mark]
+                             (str "["
+                               (string/join "]-["
+                                 (for [k mark-keys
+                                       :let [v (get mark k)]
+                                       :when v]
+                                   (cond
+                                     (= :consumable? k)
+                                     "consume"
+
+                                     (= :seq? k)
+                                     "seq"
+
+                                     (= v "PersistentVector")
+                                     "Vector"
+
+                                     (= :clj-version k)
+                                     (string/replace v #"-.*" "")
+
+                                     :else
+                                     v)))
+                               "]")))
+                         #(select-keys % mark-keys))]
+    (->> bench-data
+      (sort-by (juxt :size))
+      ;; Initially ids were namespaced keywords, now they're strings.
+      (map #(cond-> %
+              (keyword? (:id %))
+              (update :id (fn [id] (format "(%s %s)" (namespace id) (name id))))))
+      (map #(assoc % ::chart-id (mark->chart-id %)))
+      (group-by (apply juxt chart-keys))
+      (into {}
+        (map (fn [[joined-values marks]]
+               (let [{:keys [id]} (zipmap chart-keys joined-values)]
+                 [id (reduce (fn [m [color {::keys [chart-id]
+                                            :keys  [size mean lower-q upper-q]}]]
+                               (-> m
+                                 (update-in [chart-id :x] (fnil conj []) size)
+                                 (update-in [chart-id :y] (fnil conj []) (* 1000 mean))
+                                 (update-in [chart-id :error-bars] (fnil conj []) (* 1000 (- upper-q lower-q)))
+                                 (assoc-in [chart-id :style] color)))
+                       {}
+                       (map vector colors marks))])))))))
 
 (defn file->chart-data [idx file]
-  (let [colors [{:line-color   :green
-                 :marker-color :green
-                 :marker-type  :square}
-                {:line-color   :blue
-                 :marker-color :blue
-                 :marker-type  :circle}
-                {:line-color   :red
-                 :marker-color :red
-                 :marker-type  :triangle-up}
-                {:line-color   :orange
-                 :marker-color :orange
-                 :marker-type  :triangle-down}]]
-   (->> (slurp file)
-     (string/split-lines)
-     (map read-string)
-     (vec)
-     (group-by :id)
-     (into {}
-       (map (fn [[id marks]]
-              [id (->> marks
-                    (reduce (fn [m {:keys [clj-version id size mean lower-q upper-q]}]
-                              (let [chart-id (format "(%s %s) [%s]-[%s]"
-                                               (namespace id)
-                                               (name id)
-                                               (subs clj-version 0 (or (string/index-of clj-version "-") (count clj-version)))
-                                               idx)]
-                                (-> m
-                                  (update-in [chart-id :x] (fnil conj []) size)
-                                  (update-in [chart-id :y] (fnil conj []) (* 1000 mean))
-                                  (update-in [chart-id :error-bars] (fnil conj []) (* 1000 (- upper-q lower-q)))
-                                  (assoc-in [chart-id :style] (nth colors idx)))))
-                      {}))]))))))
+  (->> (slurp file)
+    (string/split-lines)
+    (map read-string)
+    (map #(assoc % ::file-idx idx))
+    (vec)
+    (bench-data->chart-data)))
+
 
 (defn- deep-merge [a b]
   (if (and (map? a) (map? b))
@@ -48,11 +83,38 @@
 (defn ->chart [[id chart-data]]
   (xchart/xy-chart
     chart-data
-    {:title            (str (symbol id))
+    {:width            500
+     :title            (str (cond-> id (keyword? id) symbol))
+     :legend           {:position :inside-nw}
      :x-axis           {:logarithmic? true}
-     :y-axis           {:logarithmic?    true
+     :y-axis           {:logarithmic?    false
                         :decimal-pattern "####.### ms"}
      :error-bars-color :match-series}))
+
+(defn chart-tabs [chart-colls]
+  (let [frame (JFrame. "XChart")]
+    (SwingUtilities/invokeLater
+      #(let [tabbedPane (doto (JTabbedPane.)
+                          #_(.setLayout (GridLayout. 1 1)))]
+         (.add frame tabbedPane BorderLayout/CENTER)
+
+         (doseq [[idx charts] (map-indexed vector chart-colls)
+                 :let [num-cols 3
+                       num-rows (inc (/ (count charts)
+                                       (double num-cols)))
+                       panel (doto (JPanel.)
+                               (.setLayout (GridLayout. num-rows num-cols)))
+                       _ (.addTab tabbedPane (str idx)
+                           (doto (JScrollPane. panel)
+                             (-> (.getVerticalScrollBar) (.setUnitIncrement 16))
+                             (.setVerticalScrollBarPolicy JScrollPane/VERTICAL_SCROLLBAR_AS_NEEDED)
+                             (.setHorizontalScrollBarPolicy JScrollPane/HORIZONTAL_SCROLLBAR_NEVER)))]
+                 chart charts]
+           (.add panel (XChartPanel. chart)))
+
+         (.pack frame)
+         (.setVisible frame true)))
+    frame))
 
 (defn render-chart! [^File output-dir chart]
   (xchart/spit chart
@@ -74,3 +136,16 @@
     (map ->chart)
     (run! (partial render-chart! output-dir)))
   )
+
+(defn view-consumables-charts [& files]
+  (->> files
+    (mapcat (fn [file]
+              (map read-string (string/split-lines (slurp file)))))
+    (map #(update % :id subs 1 (dec (count (:id %)))))
+    #_(filter (comp #{32} :form-count))
+    (group-by :type)
+    (map (fn [[t bench-data]]
+           (->> (bench-data->chart-data bench-data)
+             (sort-by key)
+             (map ->chart))))
+    (chart-tabs)))

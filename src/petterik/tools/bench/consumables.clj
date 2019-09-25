@@ -1,6 +1,6 @@
 (ns petterik.tools.bench.consumables
   (:require
-    [petterik.tools.bench.seqs :as bench.seqs :refer [*size*]]
+    [petterik.tools.bench.seqs :as bench.seqs]
     [clojure.string :as string]))
 
 
@@ -8,12 +8,14 @@
 (def form-counts
   (if bench.seqs/quick-round?
     [8]
-    [2 8 32]))
+    [16]))
 
 (def sizes
   (if bench.seqs/quick-round?
     [1000]
-    [100 10000]))
+    ;; TODO: two data points is not enough... lol.
+    ;; TODO: Figure out which things to re-run.
+    [100 1000 10000 1000000]))
 
 (def ^:dynamic *form-count*)
 
@@ -40,8 +42,8 @@
 (def datasets
   (into {}
     (for [size sizes
-          data (one-if-quick [(range size) (repeat size 0)])
-          ctor (one-if-quick [vec doall #_set])
+          data (one-if-quick [#_(range size) (repeat size 0)])
+          ctor (one-if-quick [vec #_doall #_set])
           :let [dataset (ctor data)
                 type (.getSimpleName (type dataset))
                 id (str type ":" size)]]
@@ -62,9 +64,8 @@
     (when has-consumable?
       [[{:consumable? true} `[(consumable!)]]
        [{:consumable? true
-         :seq?        true}
-        `[(consumable!)
-          (seq)]]])))
+         :seq?        true} `[(consumable!)
+                                      (seq)]]])))
 
 (defmacro bench-consumables [dataset forms]
   `(do
@@ -96,12 +97,12 @@
        (fn []
          (bench-datasets ~@forms)))))
 
-(defn all []
+(defn size []
   (bench.seqs/all))
 
 (defn quarter
   ^long []
-  (long (/ ^long *size* 4)))
+  (long (/ ^long bench.seqs/*size* 4)))
 
 (defn- counting-pred
   "Returns x or nil such that it can be used with keep"
@@ -131,11 +132,14 @@
 
 (defn every-nth [^long n]
   (let [ring (volatile! -1)]
-    (fn [x]
-      (when (zero? (vswap! ring
-                     (fn [^long x]
-                       (rem ^long (inc x) n))))
-        x))))
+    (fn self
+      ([x]
+       (when (zero? (vswap! ring
+                      (fn [^long x]
+                        (rem ^long (inc x) n))))
+         x))
+      ([idx x]
+       (self x)))))
 
 (defn idx-identity [idx x]
   x)
@@ -143,57 +147,65 @@
 (defn idx-inc [idx x]
   (inc x))
 
-(defn range-max [n]
-  (fn [x] (range (min n x))))
+(defn range-min-max [low high]
+  (fn [x] (range (min high (max low x)))))
 
+(defn log-of-size
+  ^long []
+  (long (Math/log10 (bench.seqs/all))))
 
 (defbench (map identity))
 
-(defbench (map inc))
+#_(defbench (map inc))
 
 (defbench (filter any?))
-(defbench (filter (every-nth 8)))
+(defbench (filter (every-nth (log-of-size))))
 
-(defbench (take (all)))
-(defbench (take (quarter)))
+(defbench (take (size)))
+#_(defbench (take (quarter)))
 
 (defbench (take-while any?))
-(defbench (take-while (quarter-pred)))
+#_(defbench (take-while (quarter-pred)))
+
 
 (defbench (drop (all-evenly)))
-(defbench (drop (quarter-evenly)))
+#_(defbench (drop (quarter-evenly)))
 (defbench (drop 1))
 
+
 (defbench (drop-while any?))
-(defbench (drop-while (quarter-evenly-pred)))
+#_(defbench (drop-while (quarter-evenly-pred)))
 (defbench (drop-while (counting-pred 1)))
 
-(defbench (take-nth (all)))
-(defbench (take-nth (quarter)))
+#_(defbench (take-nth (size)))
+#_(defbench (take-nth (quarter)))
 (defbench (take-nth 1))
+(defbench (take-nth (log-of-size)))
+
 
 (defbench (distinct))
 
-(defbench (interpose nil))
+(defbench (interpose nil) (take (size)))
 
 (defbench (partition-by identity))
 
 (defbench (partition-all 1))
-(defbench (partition-all 32))
+(defbench (partition-all (log-of-size)))
 
 (defbench (map-indexed idx-identity))
-(defbench (map-indexed idx-inc))
+#_(defbench (map-indexed idx-inc))
 
 (defbench (keep identity))
-(defbench (keep (quarter-evenly-pred)))
-(defbench (keep (every-nth 48)))
+#_(defbench (keep (quarter-evenly-pred)))
+(defbench (keep (every-nth (log-of-size))))
 
-(defbench (keep-indexed idx-identity))
-(defbench (keep-indexed (quarter-evenly-pred)))
+#_(defbench (keep-indexed idx-identity))
+(defbench (keep-indexed (every-nth (log-of-size))))
+
 
 (defbench (dedupe))
 
-(defbench (mapcat (range-max 50)) (take (all)))
+(defbench (mapcat (range-min-max (log-of-size) 50)) (take (size)))
 
 (defn -main [& args]
   ;; *ns* is not set when main is called. Who knew?
