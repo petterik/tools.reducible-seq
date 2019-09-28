@@ -15,7 +15,8 @@
     [1000]
     ;; TODO: two data points is not enough... lol.
     ;; TODO: Figure out which things to re-run.
-    [100 1000 10000 1000000]))
+    #_[100 1000 10000 1000000]
+    [100000]))
 
 (def ^:dynamic *form-count*)
 
@@ -42,8 +43,8 @@
 (def datasets
   (into {}
     (for [size sizes
-          data (one-if-quick [#_(range size) (repeat size 0)])
-          ctor (one-if-quick [vec #_doall #_set])
+          data (one-if-quick [(range size) (repeat size 0) (vec (repeat size 0))])
+          ctor (one-if-quick [#_vec doall #_set])
           :let [dataset (ctor data)
                 type (.getSimpleName (type dataset))
                 id (str type ":" size)]]

@@ -46,7 +46,7 @@
                                "]")))
                          #(select-keys % mark-keys))]
     (->> bench-data
-      (sort-by (juxt :size))
+      (sort-by :size)
       ;; Initially ids were namespaced keywords, now they're strings.
       (map #(cond-> %
               (keyword? (:id %))
@@ -87,8 +87,8 @@
      :title            (str (cond-> id (keyword? id) symbol))
      :legend           {:position :inside-nw}
      :x-axis           {:logarithmic? true}
-     :y-axis           {:logarithmic?    false
-                        :decimal-pattern "####.### ms"}
+     :y-axis           {:logarithmic?    true
+                        :decimal-pattern "#,###.### ms"}
      :error-bars-color :match-series}))
 
 (defn chart-tabs [chart-colls]
@@ -142,10 +142,16 @@
     (mapcat (fn [file]
               (map read-string (string/split-lines (slurp file)))))
     (map #(update % :id subs 1 (dec (count (:id %)))))
-    #_(filter (comp #{32} :form-count))
     (group-by :type)
     (map (fn [[t bench-data]]
            (->> (bench-data->chart-data bench-data)
              (sort-by key)
              (map ->chart))))
+    (apply interleave)
+    (vector)
     (chart-tabs)))
+
+;; TODO: Relative speedup/slowdown to 1.10.1
+;; TODO: Spit renderings out to file.
+;; TODO: Create blog post draft.
+;; TODO: Post in #clojure-dev
