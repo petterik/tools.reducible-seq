@@ -10,9 +10,9 @@
 
 (def colors
   (mapv (fn [color marker]
-         {:line-color   color
-          :marker-color color
-          :marker-type  marker})
+          {:line-color   color
+           :marker-color color
+           :marker-type  marker})
     (keys (dissoc xchart/colors :yellow))
     (cycle (keys xchart/markers))))
 
@@ -85,10 +85,11 @@
     chart-data
     {:width            500
      :title            (str (cond-> id (keyword? id) symbol))
-     :legend           {:position :inside-nw}
+     :legend           {:position :inside-sw}
      :x-axis           {:logarithmic? true}
-     :y-axis           {:logarithmic?    true
-                        :decimal-pattern "#,###.### ms"}
+     :y-axis           {:logarithmic?    false
+                        :min 0
+                        #_#_:decimal-pattern "#,###.### ms"}
      :error-bars-color :match-series}))
 
 (defn chart-tabs [chart-colls]
@@ -142,6 +143,20 @@
     (mapcat (fn [file]
               (map read-string (string/split-lines (slurp file)))))
     (map #(update % :id subs 1 (dec (count (:id %)))))
+    ;; TODO: Compare baseline with each other version
+    ;;       of the seqs. identity, consumable, consumabe+seq.
+    ;;       maybe one per tab?
+    #_#_#_
+    (filter (comp (partial < 1000) :size))
+    (remove (every-pred :consumable? (complement :seq?)))
+    (remove (every-pred
+              (comp #(string/starts-with? % "1.11.0") :clj-version)
+              (complement :seq?)))
+    (map (fn [{:keys [size] :as m}]
+           (-> m
+             (update :mean / size)
+             (update :lower-q / size)
+             (update :upper-q / size))))
     (group-by :type)
     (map (fn [[t bench-data]]
            (->> (bench-data->chart-data bench-data)
@@ -155,3 +170,9 @@
 ;; TODO: Spit renderings out to file.
 ;; TODO: Create blog post draft.
 ;; TODO: Post in #clojure-dev
+;; TODO: Change consumable! such that it doesn't recursively
+;;       affect the data structure.
+;; TODO: Have the consumable! object implement IConsumable
+;; TODO: Test Vector & Set, instead of range and repeat?
+;;       It'll test map, set and vector, chunked and not,
+;; TODO: Test this with a 1e5 size

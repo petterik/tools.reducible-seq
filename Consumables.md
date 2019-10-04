@@ -35,24 +35,33 @@ When `seq` is called on the `consumable!` return object, it's results are cached
 The object returned by `consumable!` should be as fast or faster to iterate over in both reducing contexts as in seq contexts (first, rest) both chunked and not.
 
 ## Problems
-1. Making the feature a la carte. Sequence functions can opt-in to use the consumable features of:
-* Consumable in reducing contexts
-* Consumable in sequence contexts
-  * when composing with at least one other consumable
-  * when used alone.
+0. Extracting and composing the sequence functions' transducers.
 
-2. Keeping the semantics of the functions, i.e. the lazyness. In a sequence context, the transducers are not allowed buffer results and must call the reducing functions a constant number of times per item. Concatenation is not allowed. But in a reducing context, both of these are legal.
+1. Keeping the semantics of the functions, i.e. the lazyness. In a sequence context, the transducers are not allowed buffer results and must call the reducing functions a constant number of times per item. Concatenation is not allowed. But in a reducing context, both of these are legal.
 
-3. Implementing a single transducer sequence as fast as the current custom lazy-seq implementations.
+2. Implementing a single transducer sequence as fast as the current custom lazy-seq implementations.
   * I.e. making these two as fast:
     - (run! identity (map inc (range 1e6)))
     - (run! identity (consumable! (map inc (range 1e6))))
   * The current transducer sequence implementation is way too slow:
     - (run! identity (sequence (map inc) (range 1e6)))
 
+3. Making the feature a la carte. Sequence functions can opt-in to use the consumable features of:
+* Consumable in reducing contexts
+* Consumable in sequence contexts
+  * when composing with at least one other consumable
+  * when used alone.
+
 4. Getting the compiler to add the consumable optimizations when possible. It would not be ideal if Clojure devs introduced calls to a function like `consumable!` all over their code, when most of the time it's not beneficial.
 
 
 ## Progress
+
+Problems 0, 1 and 2 is mostly done.
+
+3 is almost there. Needs some clean up.
+
+4. I'm not sure whether I can do.
+
 
 
